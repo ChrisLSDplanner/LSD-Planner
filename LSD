@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LSD Trip Planner - With XLS Export</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: Arial; padding: 20px; background: #f0f0f0; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; }
+        h2 { text-align: center; }
+        label { display: block; margin: 15px 0 5px; font-weight: bold; }
+        input, select, button { width: 100%; padding: 12px; margin-bottom: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        #status { margin-top: 20px; font-weight: bold; color: #333; white-space: pre-wrap; }
+        #filterSection { display: none; margin-top: 20px; }
+        select[multiple] { height: 120px; }
+        #rawOcr { display: none; margin-top: 20px; padding: 10px; background: #f8f8f8; border: 1px solid #ddd; max-height: 300px; overflow-y: auto; font-family: monospace; }
+        .tip { color: #d32f2f; font-weight: bold; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>LSD Trip Planner - With XLS Export</h2>
+
+        <p class="tip">Tip: Scan photos with Adobe Scan or Microsoft Lens for best results.</p>
+
+        <label>Starting Point</label>
+        <input type="text" id="startLocation" placeholder="Using current location...">
+        <div id="locationStatus">Detecting location...</div>
+
+        <label>Photos (select multiple!)</label>
+        <input type="file" id="imageInput" accept="image/*" capture="environment" multiple>
+
+        <button onclick="extractAndShowFilters()">Extract from Photos</button>
+        <button onclick="toggleRawOcr()">Show Raw OCR (debug)</button>
+
+        <div id="rawOcr"></div>
+
+        <div id="filterSection">
+            <label for="sizeFilter">Sizes:</label>
+            <select id="sizeFilter" multiple></select>
+
+            <label for="typeFilter">Types:</label>
+            <select id="typeFilter" multiple></select>
+
+            <button onclick="applyFiltersAndPlot()">Plot Route</button>
+            <button id="exportBtn" style="display:none; background: #28a745;" onclick="exportToXLS()">Export to XLS</button>
+        </div>
+
+        <div id="status"></div>
+    </div>
+
+    <script>
+        const apiKey = '0612d4c427304ccd8227cc60c707b019';
+
+        let currentLat = null;
+        let currentLon = null;
+        let allTasks = [];
+        let rawTexts = [];
+
+        const startInput = document.getElementById('startLocation');
+        const locationStatus = document.getElementById('locationStatus');
+        const status = document.getElementById('status');
+        const filterSection = document.getElementById('filterSection');
+        const sizeFilter = document.getElementById('sizeFilter');
+        const typeFilter = document.getElementById('typeFilter');
+        const rawOcrDiv = document.getElementById('rawOcr');
+        const exportBtn = document.getElementById('exportBtn');
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(pos => {
+                currentLat = pos.coords.latitude;
+                currentLon = pos.coords.longitude;
+                locationStatus.textContent = 'Current location OK';
+                startInput.value = 'Current location';
+                startInput.disabled = true;
+            }, () => {
+                locationStatus.textContent = 'Location denied';
+                startInput.disabled = false;
+            });
+        }
+
+        function toggleRawOcr() {
+            rawOcrDiv.style.display = rawOcrDiv.style.display === 'block' ? 'none' : 'block';
+        }
+
+        async function extractAndShowFilters() {
+            status.textContent = 'Processing... wait 10-90s';
+            const files = document.getElementById('imageInput').files;
+
+            if (files.length === 0) return status.textContent = 'Select photos first.';
+
+            allTasks = [];
+            rawTexts = [];
+            const sizeSet = new Set();
+            const typeSet = new Set();
+
+            for (const file of files) {
+                try {
+                    const { createWorker } = Tesseract;
+                    const worker = await createWorker('eng');
+                    const { data: { text } } = await worker.recognize(file);
+                    await worker.terminate();
+
+                    rawTexts.push(`From ${file.name}:\n${text.substring(0, 1500)}\n...`);
+
+                    const cleaned = text.replace(/[^0-9a-zA-Z\-\/"W M]/gi, ' ').replace(/\s+/g, ' ').trim();
+                    const lines = cleaned.split(/[\n|]/).map(l => l.trim()).filter(l => l.length > 10 && /\d/.test(l));
+
+                    lines.forEach(line => {
+                        const lsdMatch = line.match(/(\d{1,2}\s*[-\/]\s*\d{1,2}\s*[-\/]\s*\d{2,3}\s*[-\/]\s*\d{1,2}\s*[-\/]\s*W\s*[4-6]\s*M?)/i);
+                        if (!lsdMatch) return;
+
+                        let lsd = lsdMatch[0].replace(/\s/g, '').replace(/[^0-9WM-]/gi, '');
+                        const parts = lsd.split('-');
+                        if (parts.length === 5) {
+                            lsd = `${parts[0].padStart(2,'0')}-${parts[1].padStart(2,'0')}-${parts[2].padStart(3,'0')}-${parts[3].padStart(2,'0')}-${parts[4].toUpperCase()}`;
+                            const sizeMatch = line.match(/(\d{1,2}\/\d{1,2}"?|\d"|\d\/\d)/i);
+                            const size = sizeMatch ? sizeMatch[0].replace(/\s/g, '').toUpperCase() : '';
+                            let type = '';
+                            const lower = line.toLowerCase();
+                            if (/dry ?flow/.test(lower)) type = 'DRY FLOW';
+                            else if (/npt ?turbine|turbine/.test(lower)) type = 'NPT TURBINE';
+                            else if (/rosemount|emerson|efm/.test(lower)) type = 'EFM';
+
+                            allTasks.push({lsd, size, type, rawLine: line});
+                            if (size) sizeSet.add(size);
+                            if (type) typeSet.add(type);
+                        }
+                    });
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+
+            rawOcrDiv.innerText = rawTexts.join('\n\n');
+
+            if (allTasks.length === 0) {
+                status.textContent = 'No patterns found. Try scanning with Adobe Scan or Microsoft Lens for better results. Raw text above.';
+                return;
+            }
+
+            sizeFilter.innerHTML = '';
+            [...sizeSet].sort().forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s;
+                opt.textContent = s;
+                sizeFilter.appendChild(opt);
+            });
+
+            typeFilter.innerHTML = '';
+            [...typeSet].sort().forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t;
+                opt.textContent = t;
+                typeFilter.appendChild(opt);
+            });
+
+            filterSection.style.display = 'block';
+            exportBtn.style.display = 'block';
+            status.textContent = `Found ${allTasks.length} tasks from ${files.length} photo(s).\nSelect filters and plot, or export to XLS.`;
+        }
+
+        function exportToXLS() {
+            const data = allTasks.map(task => ({
+                LSD: task.lsd,
+                Size: task.size,
+                Type: task.type,
+                Raw: task.rawLine
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "LSD Tasks");
+            XLSX.writeFile(wb, "lsd_tasks.xlsx");
+            status.textContent += '\nXLS downloaded! Open in Excel/Google Sheets.';
+        }
+
+        async function applyFiltersAndPlot() {
+            status.textContent = 'Plotting...';
+
+            const selectedSizes = Array.from(sizeFilter.selectedOptions).map(o => o.value);
+            const selectedTypes = Array.from(typeFilter.selectedOptions).map(o => o.value);
+
+            const filtered = allTasks.filter(task => {
+                const sizeOk = selectedSizes.length === 0 || selectedSizes.includes(task.size);
+                const typeOk = selectedTypes.length === 0 || selectedTypes.includes(task.type);
+                return sizeOk && typeOk;
+            });
+
+            if (filtered.length === 0) return status.textContent = 'No matching tasks.';
+
+            const start = currentLat ? {lat: currentLat, lon: currentLon} : {lat: 51.0447, lon: -114.0719};
+
+            const points = [];
+            const unique = new Set();
+            for (const task of filtered) {
+                if (unique.has(task.lsd)) continue;
+                unique.add(task.lsd);
+                const coord = await getLatLongFromLSD(task.lsd);
+                if (coord) points.push(coord);
+            }
+
+            if (points.length === 0) return status.textContent = 'No coordinates.';
+
+            let url = `https://www.google.com/maps/dir/?api=1&origin=${start.lat},${start.lon}&destination=${start.lat},${start.lon}&travelmode=driving&dir_action=navigate`;
+            if (points.length <= 8) {
+                const waypoints = points.map(p => `${p.lat},${p.lon}`).join('|');
+                url += `&waypoints=optimize:true|${waypoints}`;
+            } else {
+                const markers = points.map(p => `markers=${p.lat},${p.lon}`).join('&');
+                url = `https://www.google.com/maps/search/?api=1&${markers}`;
+            }
+
+            window.open(url, '_blank');
+            status.textContent = `Opening Maps with ${points.length} locations. XLS export available above.`;
+        }
+
+        async function getLatLongFromLSD(lsd) {
+            try {
+                const res = await fetch(`https://developer.townshipcanada.com/search/legal-location?location=${encodeURIComponent(lsd)}`, {
+                    headers: { 'x-api-key': apiKey }
+                });
+                if (!res.ok) return null;
+                const data = await res.json();
+                for (const f of data.features || []) {
+                    if (f.geometry?.type === 'Point') {
+                        const [lon, lat] = f.geometry.coordinates;
+                        return {lat, lon};
+                    }
+                }
+            } catch {}
+            return null;
+        }
+    </script>
+</body>
+</html>
