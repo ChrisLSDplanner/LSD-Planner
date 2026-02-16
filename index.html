@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LSD Trip Planner - Version 354</title>
+    <title>LSD Trip Planner - Version 355</title>
     <style>
         body { font-family: Arial; padding: 20px; background: #f0f0f0; text-align: center; }
         .container { max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
@@ -21,7 +21,7 @@
 </head>
 <body>
     <div class="container">
-        <p id="version">Version 354</p>
+        <p id="version">Version 355</p>
 
         <h2>LSD Trip Planner - Lens Paste</h2>
 
@@ -81,28 +81,31 @@
             const lines = text.split('\n').map(l => l.trim()).filter(l => l);
 
             lines.forEach(line => {
-                // Loose match: 4 numbers with dashes/spaces, optional W4-6
-                const lsdMatch = line.match(/(\d{1,2})\s*[-–—]\s*(\d{1,2})\s*[-–—]\s*(\d{2,3})\s*[-–—]\s*(\d{1,2})\s*[-–—]\s*(W\s*[4-6]\s*M?)?/i);
+                // Ultra-loose match: find any 4 numbers separated by spaces/dashes, optional W4-6
+                const lsdMatch = line.match(/(\d{1,2})\s*[-–—]?\s*(\d{1,2})\s*[-–—]?\s*(\d{2,3})\s*[-–—]?\s*(\d{1,2})\s*[-–—]?\s*(W\s*[4-6]\s*M?)?/i);
                 if (!lsdMatch) return;
 
                 let lsd = `${lsdMatch[1].padStart(2,'0')}-${lsdMatch[2].padStart(2,'0')}-${lsdMatch[3].padStart(3,'0')}-${lsdMatch[4].padStart(2,'0')}`;
                 if (lsdMatch[5]) lsd += `-${lsdMatch[5].replace(/\s/g,'').toUpperCase()}`;
 
-                const sizeMatch = line.match(/(\d{1,2}\/\d{1,2}"?|\d"|\d\/\d)/i);
+                const sizeMatch = line.match(/(\d{1,2}\/\d{1,2}"?|\d"|\d\/\d|\d\.\d{3})/i);
                 const size = sizeMatch ? sizeMatch[0].replace(/\s/g, '').toUpperCase() : '';
 
                 let type = '';
                 const lower = line.toLowerCase();
                 if (/dry ?flow/.test(lower)) type = 'DRY FLOW';
                 else if (/npt ?turbine|turbine/.test(lower)) type = 'NPT TURBINE';
-                else if (/rosemount|emerson|efm/.test(lower)) type = 'EFM';
+                else if (/rosemount|emerson|efm|micro motion|fisher/.test(lower)) type = 'EFM/OTHER';
 
                 allTasks.push({lsd, size, type, rawLine: line});
                 if (size) sizeSet.add(size);
                 if (type) typeSet.add(type);
             });
 
-            if (allTasks.length === 0) return status.textContent = 'No LSDs found in pasted text. Make sure the pasted text includes the LSD lines (like 04-38-49-09). Try copying more text from Lens or a different scan.';
+            if (allTasks.length === 0) {
+                status.textContent = 'No LSDs found in pasted text. Make sure the pasted text includes the LSD lines (like 04-38-49-09 or CC 11-22 04-38-49-09). Try copying more text or a different scan.';
+                return;
+            }
 
             sizeFilter.innerHTML = '';
             [...sizeSet].sort().forEach(s => {
@@ -136,7 +139,7 @@
                 return sizeOk && typeOk;
             });
 
-            if (filtered.length === 0) return status.textContent = 'No matching tasks.';
+            if (filtered.length === 0) return status.textContent = 'No matching tasks. Try selecting fewer filters or none.';
 
             const start = currentLat ? {lat: currentLat, lon: currentLon} : {lat: 51.0447, lon: -114.0719};
 
