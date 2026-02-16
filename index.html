@@ -20,7 +20,8 @@
         #filterSection { display: none; margin-top: 20px; }
         select[multiple] { height: 120px; }
     </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+    <script src="https://unpkg.com/pdfjs-dist@2.10.377/build/pdf.min.js"></script>
+    <script src="https://unpkg.com/pdfjs-dist@2.10.377/build/pdf.worker.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -110,10 +111,10 @@
                     if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
                         logDebug('Processing PDF...');
                         if (typeof pdfjsLib === 'undefined') {
-                            logDebug('pdfjsLib not loaded. Skipping PDF.';
+                            logDebug('pdfjsLib failed to load. Skipping PDF.');
                             continue;
                         }
-                        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.worker.min.js';
+                        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@2.10.377/build/pdf.worker.min.js';
                         const arrayBuffer = await file.arrayBuffer();
                         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
                         for (let i = 1; i <= pdf.numPages; i++) {
