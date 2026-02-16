@@ -3,46 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LSD Trip Planner - Updated OCR</title>
+    <title>LSD Trip Planner</title>
     <style>
-        body { font-family: Arial; padding: 20px; background: #f0f0f0; }
-        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; }
-        h2 { text-align: center; }
-        .tip { color: #d32f2f; font-weight: bold; margin: 10px 0; }
-        label { display: block; margin: 15px 0 5px; font-weight: bold; }
-        input, select, button { width: 100%; padding: 12px; margin-bottom: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
-        button { background: #007bff; color: white; border: none; cursor: pointer; }
+        body { font-family: Arial; padding: 20px; background: #f0f0f0; text-align: center; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
+        h2 { color: #333; }
+        .tip { color: #d32f2f; font-weight: bold; margin: 15px 0; font-size: 18px; }
+        label { display: block; margin: 20px 0 10px; font-size: 18px; font-weight: bold; }
+        input[type="file"] { width: 100%; padding: 15px; font-size: 16px; border: 2px dashed #007bff; border-radius: 10px; background: #f8f9fa; }
+        button { width: 100%; padding: 18px; font-size: 20px; background: #007bff; color: white; border: none; border-radius: 10px; cursor: pointer; margin: 15px 0; }
         button:hover { background: #0056b3; }
-        #status { margin-top: 20px; font-weight: bold; color: #333; white-space: pre-wrap; }
-        #filterSection { display: none; margin-top: 20px; }
-        select[multiple] { height: 120px; }
-        #rawOcr { display: none; margin-top: 20px; padding: 10px; background: #f8f8f8; border: 1px solid #ddd; max-height: 300px; overflow-y: auto; font-family: monospace; }
+        #status { margin-top: 20px; font-size: 18px; font-weight: bold; color: #333; white-space: pre-wrap; }
+        #filterSection { display: none; margin-top: 30px; }
+        select[multiple] { height: 140px; width: 100%; font-size: 16px; }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body>
     <div class="container">
-        <h2>LSD Trip Planner - Updated OCR</h2>
+        <h2>LSD Trip Planner</h2>
 
-        <p class="tip">Tip: For best OCR, scan with Adobe Scan or Microsoft Lens (fixes noise/light/grid) — then choose the scan from gallery/files here.</p>
+        <p class="tip">Take photo in good light, flat paper, overhead angle. If it fails, scan with Adobe Scan (5 seconds) for better results.</p>
 
         <label>Starting Point</label>
         <input type="text" id="startLocation" placeholder="Using current location...">
         <div id="locationStatus">Detecting location...</div>
 
-        <label>Photos (select multiple from camera/gallery/files!)</label>
+        <label>Take or Select Photo(s)</label>
         <input type="file" id="imageInput" accept="image/*" multiple>
 
-        <button onclick="extractAndShowFilters()">Extract from Photos</button>
-        <button onclick="toggleRawOcr()">Show Raw OCR (debug)</button>
-
-        <div id="rawOcr"></div>
+        <button onclick="extractAndShowFilters()">Extract & Plot Route</button>
 
         <div id="filterSection">
-            <label for="sizeFilter">Sizes:</label>
+            <label>Sizes:</label>
             <select id="sizeFilter" multiple></select>
 
-            <label for="typeFilter">Types:</label>
+            <label>Types:</label>
             <select id="typeFilter" multiple></select>
 
             <button onclick="applyFiltersAndPlot()">Plot Route</button>
@@ -57,7 +53,6 @@
         let currentLat = null;
         let currentLon = null;
         let allTasks = [];
-        let rawTexts = [];
 
         const startInput = document.getElementById('startLocation');
         const locationStatus = document.getElementById('locationStatus');
@@ -65,33 +60,27 @@
         const filterSection = document.getElementById('filterSection');
         const sizeFilter = document.getElementById('sizeFilter');
         const typeFilter = document.getElementById('typeFilter');
-        const rawOcrDiv = document.getElementById('rawOcr');
 
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(pos => {
                 currentLat = pos.coords.latitude;
                 currentLon = pos.coords.longitude;
-                locationStatus.textContent = 'Current location OK';
+                locationStatus.textContent = 'Location ready';
                 startInput.value = 'Current location';
                 startInput.disabled = true;
             }, () => {
-                locationStatus.textContent = 'Location denied';
+                locationStatus.textContent = 'Location denied – enter address manually';
                 startInput.disabled = false;
             });
         }
 
-        function toggleRawOcr() {
-            rawOcrDiv.style.display = rawOcrDiv.style.display === 'block' ? 'none' : 'block';
-        }
-
         async function extractAndShowFilters() {
-            status.textContent = 'Processing... wait 10-90s';
+            status.textContent = 'Processing photo(s)... wait 10-90s';
             const files = document.getElementById('imageInput').files;
 
-            if (files.length === 0) return status.textContent = 'Select photos first.';
+            if (files.length === 0) return status.textContent = 'Select or take photo first.';
 
             allTasks = [];
-            rawTexts = [];
             const sizeSet = new Set();
             const typeSet = new Set();
 
@@ -102,41 +91,34 @@
                     const { data: { text } } = await worker.recognize(file);
                     await worker.terminate();
 
-                    rawTexts.push(`From ${file.name}:\n${text.substring(0, 1500)}\n...`);
-
-                    const cleaned = text.replace(/[^0-9a-zA-Z\-\/"W M]/gi, ' ').replace(/\s+/g, ' ').trim();
-                    const lines = cleaned.split(/[\n|]/).map(l => l.trim()).filter(l => l.length > 10 && /\d/.test(l));
+                    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
 
                     lines.forEach(line => {
-                        const lsdMatch = line.match(/(\d{1,2}\s*[-\/]\s*\d{1,2}\s*[-\/]\s*\d{2,3}\s*[-\/]\s*\d{1,2}\s*[-\/]\s*W\s*[4-6]\s*M?)/i);
+                        const lsdMatch = line.match(/(\d{1,2})-(\d{1,2})-(\d{2,3})-(\d{1,2})-(W[4-6]M?)/i);
                         if (!lsdMatch) return;
 
-                        let lsd = lsdMatch[0].replace(/\s/g, '').replace(/[^0-9WM-]/gi, '');
-                        const parts = lsd.split('-');
-                        if (parts.length === 5) {
-                            lsd = `${parts[0].padStart(2,'0')}-${parts[1].padStart(2,'0')}-${parts[2].padStart(3,'0')}-${parts[3].padStart(2,'0')}-${parts[4].toUpperCase()}`;
-                            const sizeMatch = line.match(/(\d{1,2}\/\d{1,2}"?|\d"|\d\/\d)/i);
-                            const size = sizeMatch ? sizeMatch[0].replace(/\s/g, '').toUpperCase() : '';
-                            let type = '';
-                            const lower = line.toLowerCase();
-                            if (/dry ?flow/.test(lower)) type = 'DRY FLOW';
-                            else if (/npt ?turbine|turbine/.test(lower)) type = 'NPT TURBINE';
-                            else if (/rosemount|emerson|efm/.test(lower)) type = 'EFM';
+                        let lsd = `${lsdMatch[1].padStart(2,'0')}-${lsdMatch[2].padStart(2,'0')}-${lsdMatch[3].padStart(3,'0')}-${lsdMatch[4].padStart(2,'0')}-${lsdMatch[5].toUpperCase()}`;
 
-                            allTasks.push({lsd, size, type, rawLine: line});
-                            if (size) sizeSet.add(size);
-                            if (type) typeSet.add(type);
-                        }
+                        const sizeMatch = line.match(/(\d{1,2}\/\d{1,2}"?|\d"|\d\/\d)/i);
+                        const size = sizeMatch ? sizeMatch[0].toUpperCase() : '';
+
+                        let type = '';
+                        const lower = line.toLowerCase();
+                        if (/dry ?flow/.test(lower)) type = 'DRY FLOW';
+                        else if (/npt ?turbine|turbine/.test(lower)) type = 'NPT TURBINE';
+                        else if (/rosemount|emerson|efm/.test(lower)) type = 'EFM';
+
+                        allTasks.push({lsd, size, type, rawLine: line});
+                        if (size) sizeSet.add(size);
+                        if (type) typeSet.add(type);
                     });
                 } catch (e) {
                     console.error(e);
                 }
             }
 
-            rawOcrDiv.innerText = rawTexts.join('\n\n');
-
             if (allTasks.length === 0) {
-                status.textContent = 'No patterns found. Try scanning with Adobe Scan or Microsoft Lens for better results. Raw text in box above.';
+                status.textContent = 'No LSDs found. Try better lighting, flat paper, overhead angle, or scan with Adobe Scan/Google Drive Scan for cleaner image.';
                 return;
             }
 
@@ -157,11 +139,11 @@
             });
 
             filterSection.style.display = 'block';
-            status.textContent = `Found ${allTasks.length} tasks from ${files.length} photo(s). Select filters and plot.`;
+            status.textContent = `Found ${allTasks.length} tasks. Select filters and plot.`;
         }
 
         async function applyFiltersAndPlot() {
-            status.textContent = 'Plotting...';
+            status.textContent = 'Plotting route...';
 
             const selectedSizes = Array.from(sizeFilter.selectedOptions).map(o => o.value);
             const selectedTypes = Array.from(typeFilter.selectedOptions).map(o => o.value);
@@ -185,7 +167,7 @@
                 if (coord) points.push(coord);
             }
 
-            if (points.length === 0) return status.textContent = 'No coordinates.';
+            if (points.length === 0) return status.textContent = 'No valid locations.';
 
             let url = `https://www.google.com/maps/dir/?api=1&origin=${start.lat},${start.lon}&destination=${start.lat},${start.lon}&travelmode=driving&dir_action=navigate`;
             if (points.length <= 8) {
