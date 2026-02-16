@@ -3,41 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LSD Trip Planner - PDF Fix</title>
+    <title>LSD Trip Planner - Text Paste</title>
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; background: #f0f0f0; }
-        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
-        h2 { text-align: center; color: #333; }
-        .tip { color: #d32f2f; font-weight: bold; margin: 15px 0; font-size: 17px; }
+        body { font-family: Arial; padding: 20px; background: #f0f0f0; text-align: center; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
+        h2 { color: #333; }
+        .tip { color: #d32f2f; font-weight: bold; margin: 15px 0; font-size: 18px; }
         label { display: block; margin: 20px 0 10px; font-weight: bold; font-size: 18px; }
-        input, select, button { width: 100%; padding: 14px; margin-bottom: 12px; font-size: 17px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
-        button { background: #007bff; color: white; border: none; cursor: pointer; }
+        textarea { width: 100%; height: 200px; padding: 15px; font-size: 16px; border: 1px solid #ccc; border-radius: 10px; resize: vertical; }
+        button { width: 100%; padding: 18px; font-size: 20px; background: #007bff; color: white; border: none; border-radius: 10px; cursor: pointer; margin: 15px 0; }
         button:hover { background: #0056b3; }
-        #status { margin-top: 20px; font-weight: bold; color: #333; white-space: pre-wrap; font-size: 17px; }
+        #status { margin-top: 20px; font-weight: bold; color: #333; font-size: 17px; white-space: pre-wrap; }
         #filterSection { display: none; margin-top: 30px; }
         select[multiple] { height: 140px; width: 100%; font-size: 16px; }
-        #rawOcr { display: none; margin-top: 20px; padding: 12px; background: #f8f8f8; border: 1px solid #ddd; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 14px; }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
 </head>
 <body>
     <div class="container">
-        <h2>LSD Trip Planner - PDF Fix</h2>
+        <h2>LSD Trip Planner - Text Paste</h2>
 
-        <p class="tip">Tip: Scan with Adobe Scan → save PDF → tap upload → choose "Files" or "Browse" to pick PDF from Files app.</p>
+        <p class="tip">Scan list with Adobe Scan → open in Google Photos → tap Lens → copy text → paste below → tap Extract.</p>
 
-        <label>Starting Point</label>
-        <input type="text" id="startLocation" placeholder="Using current location...">
-        <div id="locationStatus">Detecting location...</div>
+        <label>Paste OCR Text Here</label>
+        <textarea id="ocrText" placeholder="Paste the copied text from Google Lens here..."></textarea>
 
-        <label>Upload Photos or PDFs (multiple OK)</label>
-        <input type="file" id="imageInput" multiple>
-
-        <button onclick="extractAndShowFilters()">Extract & Plot Route</button>
-        <button onclick="toggleRawOcr()">Show Raw OCR (debug)</button>
-
-        <div id="rawOcr"></div>
+        <button onclick="extractFromText()">Extract from Text</button>
 
         <div id="filterSection">
             <label for="sizeFilter">Sizes (select multiple):</label>
@@ -58,98 +48,56 @@
         let currentLat = null;
         let currentLon = null;
         let allTasks = [];
-        let rawTexts = [];
 
         const startInput = document.getElementById('startLocation');
-        const locationStatus = document.getElementById('locationStatus');
         const status = document.getElementById('status');
         const filterSection = document.getElementById('filterSection');
         const sizeFilter = document.getElementById('sizeFilter');
         const typeFilter = document.getElementById('typeFilter');
-        const rawOcrDiv = document.getElementById('rawOcr');
 
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(pos => {
                 currentLat = pos.coords.latitude;
                 currentLon = pos.coords.longitude;
-                locationStatus.textContent = 'Location ready';
-                startInput.value = 'Current location';
-                startInput.disabled = true;
+                status.textContent = 'Location ready';
             }, () => {
-                locationStatus.textContent = 'Location denied – enter address manually';
-                startInput.disabled = false;
+                status.textContent = 'Location denied – enter address manually';
             });
         }
 
-        function toggleRawOcr() {
-            rawOcrDiv.style.display = rawOcrDiv.style.display === 'block' ? 'none' : 'block';
-        }
+        function extractFromText() {
+            status.textContent = 'Extracting...';
+            const text = document.getElementById('ocrText').value.trim();
 
-        async function extractAndShowFilters() {
-            status.textContent = 'Processing files... wait 10-120s';
-            const files = document.getElementById('imageInput').files;
-
-            if (files.length === 0) return status.textContent = 'Select file(s) first.';
+            if (!text) return status.textContent = 'Paste text first.';
 
             allTasks = [];
-            rawTexts = [];
             const sizeSet = new Set();
             const typeSet = new Set();
 
-            for (const file of files) {
-                try {
-                    let text = '';
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l);
 
-                    if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
-                        const arrayBuffer = await file.arrayBuffer();
-                        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-                        for (let i = 1; i <= pdf.numPages; i++) {
-                            const page = await pdf.getPage(i);
-                            const content = await page.getTextContent();
-                            text += content.items.map(item => item.str).join(' ') + '\n';
-                        }
-                    } else {
-                        const { createWorker } = Tesseract;
-                        const worker = await createWorker('eng');
-                        const { data: { text: ocrText } } = await worker.recognize(file);
-                        await worker.terminate();
-                        text = ocrText;
-                    }
+            lines.forEach(line => {
+                const lsdMatch = line.match(/(\d{1,2})-(\d{1,2})-(\d{2,3})-(\d{1,2})-(W[4-6]M?)/i);
+                if (!lsdMatch) return;
 
-                    rawTexts.push(`From ${file.name}:\n${text.substring(0, 1500)}\n...`);
+                let lsd = `${lsdMatch[1].padStart(2,'0')}-${lsdMatch[2].padStart(2,'0')}-${lsdMatch[3].padStart(3,'0')}-${lsdMatch[4].padStart(2,'0')}-${lsdMatch[5].toUpperCase()}`;
 
-                    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+                const sizeMatch = line.match(/(\d{1,2}\/\d{1,2}"?|\d"|\d\/\d)/i);
+                const size = sizeMatch ? sizeMatch[0].toUpperCase() : '';
 
-                    lines.forEach(line => {
-                        const lsdMatch = line.match(/(\d{1,2})-(\d{1,2})-(\d{2,3})-(\d{1,2})-(W[4-6]M?)/i);
-                        if (!lsdMatch) return;
+                let type = '';
+                const lower = line.toLowerCase();
+                if (/dry ?flow/.test(lower)) type = 'DRY FLOW';
+                else if (/npt ?turbine|turbine/.test(lower)) type = 'NPT TURBINE';
+                else if (/rosemount|emerson|efm/.test(lower)) type = 'EFM';
 
-                        let lsd = `${lsdMatch[1].padStart(2,'0')}-${lsdMatch[2].padStart(2,'0')}-${lsdMatch[3].padStart(3,'0')}-${lsdMatch[4].padStart(2,'0')}-${lsdMatch[5].toUpperCase()}`;
+                allTasks.push({lsd, size, type, rawLine: line});
+                if (size) sizeSet.add(size);
+                if (type) typeSet.add(type);
+            });
 
-                        const sizeMatch = line.match(/(\d{1,2}\/\d{1,2}"?|\d"|\d\/\d)/i);
-                        const size = sizeMatch ? sizeMatch[0].toUpperCase() : '';
-
-                        let type = '';
-                        const lower = line.toLowerCase();
-                        if (/dry ?flow/.test(lower)) type = 'DRY FLOW';
-                        else if (/npt ?turbine|turbine/.test(lower)) type = 'NPT TURBINE';
-                        else if (/rosemount|emerson|efm/.test(lower)) type = 'EFM';
-
-                        allTasks.push({lsd, size, type, rawLine: line});
-                        if (size) sizeSet.add(size);
-                        if (type) typeSet.add(type);
-                    });
-                } catch (e) {
-                    console.error(e);
-                }
-            }
-
-            rawOcrDiv.innerText = rawTexts.join('\n\n');
-
-            if (allTasks.length === 0) {
-                status.textContent = 'No LSDs found in files. Try a clearer scan or different photo. Raw text in box above.';
-                return;
-            }
+            if (allTasks.length === 0) return status.textContent = 'No LSDs found in pasted text. Try copying more or different scan.';
 
             sizeFilter.innerHTML = '';
             [...sizeSet].sort().forEach(s => {
@@ -168,7 +116,7 @@
             });
 
             filterSection.style.display = 'block';
-            status.textContent = `Found ${allTasks.length} tasks from ${files.length} file(s). Select filters and plot.`;
+            status.textContent = `Found ${allTasks.length} tasks. Select filters and plot.`;
         }
 
         async function applyFiltersAndPlot() {
