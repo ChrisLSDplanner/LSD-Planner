@@ -3,17 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LSD Trip Planner</title>
+    <title>LSD Trip Planner - Debug</title>
     <style>
-        body { font-family: Arial; padding: 20px; background: #f0f0f0; }
-        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; }
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f0f0f0; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
         h2 { text-align: center; }
-        .tip { color: #d32f2f; font-weight: bold; margin: 10px 0; }
+        .tip { color: #d32f2f; font-weight: bold; margin: 15px 0; }
         label { display: block; margin: 15px 0 5px; font-weight: bold; }
         input, select, button { width: 100%; padding: 12px; margin-bottom: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
         button { background: #007bff; color: white; border: none; cursor: pointer; }
         button:hover { background: #0056b3; }
+        #debugBtn { background: #6c757d; }
+        #debugBtn:hover { background: #5a6268; }
         #status { margin-top: 20px; font-weight: bold; color: #333; white-space: pre-wrap; }
+        #debugBox { display: none; margin-top: 20px; padding: 12px; background: #f8f8f8; border: 1px solid #ddd; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 14px; white-space: pre-wrap; }
         #filterSection { display: none; margin-top: 20px; }
         select[multiple] { height: 120px; }
     </style>
@@ -22,23 +25,25 @@
     <div class="container">
         <h2>LSD Trip Planner</h2>
 
-        <p class="tip">Tip: Use Adobe Scan for multi-page lists. Upload here to extract LSDs and plot route.</p>
+        <p class="tip">Upload photo/PDF. If error, tap "Show Debug Info" and paste the text here.</p>
 
         <label>Starting Point</label>
-        <input type="text" id="startLocation" placeholder="Using current location..." disabled>
+        <input type="text" id="startLocation" placeholder="Using current location...">
+        <div id="locationStatus">Detecting location...</div>
 
-        <div id="locationStatus"></div>
-
-        <label>Upload Photo or PDF</label>
-        <input type="file" id="imageInput" accept="image/*,application/pdf">
+        <label>Upload Photos or PDFs</label>
+        <input type="file" id="imageInput" multiple>
 
         <button onclick="extractAndShowFilters()">Extract & Plot</button>
+        <button id="debugBtn" onclick="showDebug()">Show Debug Info</button>
+
+        <div id="debugBox"></div>
 
         <div id="filterSection">
-            <label for="sizeFilter">Sizes:</label>
+            <label for="sizeFilter">Sizes (select multiple):</label>
             <select id="sizeFilter" multiple></select>
 
-            <label for="typeFilter">Types:</label>
+            <label for="typeFilter">Types (select multiple):</label>
             <select id="typeFilter" multiple></select>
 
             <button onclick="applyFiltersAndPlot()">Plot Route</button>
@@ -53,6 +58,7 @@
         let currentLat = null;
         let currentLon = null;
         let allTasks = [];
+        let debugLog = [];
 
         const startInput = document.getElementById('startLocation');
         const locationStatus = document.getElementById('locationStatus');
@@ -60,96 +66,119 @@
         const filterSection = document.getElementById('filterSection');
         const sizeFilter = document.getElementById('sizeFilter');
         const typeFilter = document.getElementById('typeFilter');
+        const debugBox = document.getElementById('debugBox');
+
+        function logDebug(msg) {
+            debugLog.push(msg);
+            console.log(msg);
+        }
 
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(pos => {
                 currentLat = pos.coords.latitude;
                 currentLon = pos.coords.longitude;
-                locationStatus.textContent = 'Location ready.';
+                locationStatus.textContent = 'Location OK';
                 startInput.value = 'Current location';
-            }, () => {
-                locationStatus.textContent = 'Location denied.';
+                startInput.disabled = true;
+            }, err => {
+                locationStatus.textContent = 'Location denied: ' + err.message;
                 startInput.disabled = false;
             });
         }
 
+        function showDebug() {
+            debugBox.innerText = debugLog.join('\n\n') || 'No debug info yet.';
+            debugBox.style.display = debugBox.style.display === 'block' ? 'none' : 'block';
+        }
+
         async function extractAndShowFilters() {
             status.textContent = 'Processing...';
-            const file = document.getElementById('imageInput').files[0];
+            debugLog = [];
+            const files = document.getElementById('imageInput').files;
 
-            if (!file) return status.textContent = 'Select a file first.';
+            if (files.length === 0) return status.textContent = 'Select file(s) first.';
 
             allTasks = [];
-            const sizeSet = new Set();
-            const typeSet = new Set();
 
-            try {
-                const formData = new FormData();
-                formData.append('file', file);
-                formData.append('language', 'eng');
-                formData.append('isOverlayRequired', 'true');
-                formData.append('isTable', 'true');
+            for (const file of files) {
+                logDebug(`Processing: ${file.name} (${file.type}, ${file.size} bytes)`);
 
-                const res = await fetch('https://apipro3.ocr.space/parse/image', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await res.json();
+                try {
+                    let text = '';
 
-                let text = '';
-                if (data.ParsedResults) {
-                    data.ParsedResults.forEach(result => {
-                        text += result.ParsedText + '\n';
+                    if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+                        logDebug('Processing PDF...');
+                        const arrayBuffer = await file.arrayBuffer();
+                        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            const page = await pdf.getPage(i);
+                            const content = await page.getTextContent();
+                            text += content.items.map(item => item.str).join(' ') + '\n';
+                        }
+                    } else {
+                        logDebug('Processing image...');
+                        const { createWorker } = Tesseract;
+                        const worker = await createWorker('eng');
+                        const { data: { text: ocrText } } = await worker.recognize(file);
+                        await worker.terminate();
+                        text = ocrText;
+                    }
+
+                    logDebug(`Raw text from ${file.name}: ${text.substring(0, 500)}...`);
+
+                    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 5);
+
+                    lines.forEach(line => {
+                        const lsdMatch = line.match(/(\d{1,2})\s*[-–—]\s*(\d{1,2})\s*[-–—]\s*(\d{2,3})\s*[-–—]\s*(\d{1,2})\s*[-–—]\s*(W\s*[4-6]\s*M?)?/i);
+                        if (!lsdMatch) return;
+
+                        let lsd = `${lsdMatch[1].padStart(2,'0')}-${lsdMatch[2].padStart(2,'0')}-${lsdMatch[3].padStart(3,'0')}-${lsdMatch[4].padStart(2,'0')}`;
+                        if (lsdMatch[5]) lsd += `-${lsdMatch[5].replace(/\s/g,'').toUpperCase()}`;
+
+                        const sizeMatch = line.match(/(\d{1,2}\/\d{1,2}"?|\d"|\d\/\d)/i);
+                        const size = sizeMatch ? sizeMatch[0].replace(/\s/g, '').toUpperCase() : '';
+
+                        let type = '';
+                        const lower = line.toLowerCase();
+                        if (/dry ?flow/.test(lower)) type = 'DRY FLOW';
+                        else if (/npt ?turbine|turbine/.test(lower)) type = 'NPT TURBINE';
+                        else if (/rosemount|emerson|efm/.test(lower)) type = 'EFM';
+
+                        allTasks.push({lsd, size, type, rawLine: line});
                     });
+                } catch (e) {
+                    logDebug(`Error processing ${file.name}: ${e.message}`);
+                    status.textContent = 'Error: ' + e.message + '. Tap "Show Debug Info" for details.';
                 }
-
-                if (!text) return status.textContent = 'No text extracted. Try a different photo.';
-
-                const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-
-                lines.forEach(line => {
-                    const lsdMatch = line.match(/(\d{1,2})-(\d{1,2})-(\d{2,3})-(\d{1,2})-(W[4-6]M?)/i);
-                    if (!lsdMatch) return;
-
-                    let lsd = `${lsdMatch[1].padStart(2, '0')}-${lsdMatch[2].padStart(2, '0')}-${lsdMatch[3].padStart(3, '0')}-${lsdMatch[4].padStart(2, '0')}-${lsdMatch[5].toUpperCase()}`;
-
-                    const sizeMatch = line.match(/(\d{1,2}\/\d{1,2}"?|\d"|\d\/\d)/i);
-                    const size = sizeMatch ? sizeMatch[0] : '';
-
-                    let type = '';
-                    const lower = line.toLowerCase();
-                    if (/dry ?flow/.test(lower)) type = 'DRY FLOW';
-                    else if (/npt ?turbine|turbine/.test(lower)) type = 'NPT TURBINE';
-                    else if (/rosemount|emerson|efm|micro motion|fisher/.test(lower)) type = 'EFM/OTHER';
-
-                    allTasks.push({lsd, size, type, rawLine: line});
-                    if (size) sizeSet.add(size);
-                    if (type) typeSet.add(type);
-                });
-
-                if (allTasks.length === 0) return status.textContent = 'No LSDs found. Try a clearer scan.';
-
-                sizeFilter.innerHTML = '';
-                [...sizeSet].sort().forEach(s => {
-                    const opt = document.createElement('option');
-                    opt.value = s;
-                    opt.textContent = s;
-                    sizeFilter.appendChild(opt);
-                });
-
-                typeFilter.innerHTML = '';
-                [...typeSet].sort().forEach(t => {
-                    const opt = document.createElement('option');
-                    opt.value = t;
-                    opt.textContent = t;
-                    typeFilter.appendChild(opt);
-                });
-
-                filterSection.style.display = 'block';
-                status.textContent = `Found ${allTasks.length} tasks. Select filters and plot.`;
-            } catch (e) {
-                status.textContent = 'Error: ' + e.message;
             }
+
+            if (allTasks.length === 0) {
+                status.textContent = 'No LSDs found. Tap "Show Debug Info" and paste the text here.';
+                return;
+            }
+
+            // Populate filters (same as before)
+            const sizeSet = new Set(allTasks.map(t => t.size).filter(s => s));
+            const typeSet = new Set(allTasks.map(t => t.type).filter(t => t));
+
+            sizeFilter.innerHTML = '';
+            [...sizeSet].sort().forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s;
+                opt.textContent = s;
+                sizeFilter.appendChild(opt);
+            });
+
+            typeFilter.innerHTML = '';
+            [...typeSet].sort().forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t;
+                opt.textContent = t;
+                typeFilter.appendChild(opt);
+            });
+
+            filterSection.style.display = 'block';
+            status.textContent = `Found ${allTasks.length} tasks. Select filters and plot.`;
         }
 
         async function applyFiltersAndPlot() {
@@ -197,7 +226,10 @@
                 const res = await fetch(`https://developer.townshipcanada.com/search/legal-location?location=${encodeURIComponent(lsd)}`, {
                     headers: { 'x-api-key': apiKey }
                 });
-                if (!res.ok) return null;
+                if (!res.ok) {
+                    logDebug(`API error for ${lsd}: ${res.status} ${res.statusText}`);
+                    return null;
+                }
                 const data = await res.json();
                 for (const f of data.features || []) {
                     if (f.geometry?.type === 'Point') {
@@ -205,7 +237,9 @@
                         return {lat, lon};
                     }
                 }
-            } catch {}
+            } catch (e) {
+                logDebug(`Fetch error for ${lsd}: ${e.message}`);
+            }
             return null;
         }
     </script>
