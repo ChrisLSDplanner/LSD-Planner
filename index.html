@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LSD Trip Planner - Debug</title>
+    <title>LSD Trip Planner - PDF & JPG</title>
     <style>
         body { font-family: Arial, sans-serif; padding: 20px; background: #f0f0f0; }
         .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
@@ -20,18 +20,19 @@
         #filterSection { display: none; margin-top: 20px; }
         select[multiple] { height: 120px; }
     </style>
+    <script src="https://unpkg.com/pdfjs-dist@2.10.377/build/pdf.min.js"></script>
 </head>
 <body>
     <div class="container">
-        <h2>LSD Trip Planner</h2>
+        <h2>LSD Trip Planner - PDF & JPG</h2>
 
-        <p class="tip">Upload photo/PDF. If error, tap "Show Debug Info" and paste the text here.</p>
+        <p class="tip">Upload photo or PDF (Adobe Scan PDFs work great). If error, tap "Show Debug Info" and paste the text here.</p>
 
         <label>Starting Point</label>
         <input type="text" id="startLocation" placeholder="Using current location...">
         <div id="locationStatus">Detecting location...</div>
 
-        <label>Upload Photos or PDFs</label>
+        <label>Upload Photos or PDFs (multiple OK)</label>
         <input type="file" id="imageInput" multiple>
 
         <button onclick="extractAndShowFilters()">Extract & Plot</button>
@@ -109,6 +110,7 @@
                     if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
                         logDebug('Processing PDF...');
                         const arrayBuffer = await file.arrayBuffer();
+                        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@2.10.377/build/pdf.worker.min.js';
                         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
                         for (let i = 1; i <= pdf.numPages; i++) {
                             const page = await pdf.getPage(i);
@@ -142,7 +144,7 @@
                         const lower = line.toLowerCase();
                         if (/dry ?flow/.test(lower)) type = 'DRY FLOW';
                         else if (/npt ?turbine|turbine/.test(lower)) type = 'NPT TURBINE';
-                        else if (/rosemount|emerson|efm/.test(lower)) type = 'EFM';
+                        else if (/rosemount|emerson|efm|micro motion|fisher/.test(lower)) type = 'EFM/OTHER';
 
                         allTasks.push({lsd, size, type, rawLine: line});
                     });
@@ -157,7 +159,7 @@
                 return;
             }
 
-            // Populate filters (same as before)
+            // Populate filters
             const sizeSet = new Set(allTasks.map(t => t.size).filter(s => s));
             const typeSet = new Set(allTasks.map(t => t.type).filter(t => t));
 
