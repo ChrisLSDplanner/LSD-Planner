@@ -14,9 +14,12 @@
         button { width: 100%; padding: 18px; font-size: 20px; background: #007bff; color: white; border: none; border-radius: 10px; cursor: pointer; margin: 15px 0; }
         button:hover { background: #0056b3; }
         #status { margin-top: 20px; font-weight: bold; color: #333; font-size: 17px; white-space: pre-wrap; }
-        #filterSection { display: none; margin-top: 30px; }
+        #filterSection { display: none; margin: 30px 0; }
         select[multiple] { height: 140px; width: 100%; font-size: 16px; }
         #version { text-align: center; color: #6c757d; font-weight: bold; margin: 10px 0; font-size: 16px; }
+        #tasksBox { display: none; margin-top: 20px; padding: 12px; background: #f8f8f8; border: 1px solid #ddd; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 14px; white-space: pre-wrap; }
+        #tasksBtn { background: #6c757d; }
+        #tasksBtn:hover { background: #5a6268; }
     </style>
 </head>
 <body>
@@ -31,6 +34,10 @@
         <textarea id="ocrText" placeholder="Paste the copied text from Google Lens here..."></textarea>
 
         <button onclick="extractFromText()">Extract from Text</button>
+
+        <button id="tasksBtn" onclick="showTasks()">Show Extracted Tasks</button>
+
+        <div id="tasksBox"></div>
 
         <div id="filterSection">
             <label for="sizeFilter">Sizes (select multiple):</label>
@@ -57,6 +64,7 @@
         const filterSection = document.getElementById('filterSection');
         const sizeFilter = document.getElementById('sizeFilter');
         const typeFilter = document.getElementById('typeFilter');
+        const tasksBox = document.getElementById('tasksBox');
 
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(pos => {
@@ -66,6 +74,11 @@
             }, () => {
                 status.textContent = 'Location denied – enter address manually';
             });
+        }
+
+        function showTasks() {
+            tasksBox.innerText = allTasks.map(task => `LSD: ${task.lsd}\nSize: ${task.size}\nType: ${task.type}\nRaw: ${task.rawLine}\n---`).join('\n') || 'No tasks extracted yet.';
+            tasksBox.style.display = tasksBox.style.display === 'block' ? 'none' : 'block';
         }
 
         function extractFromText() {
@@ -81,31 +94,31 @@
             const lines = text.split('\n').map(l => l.trim()).filter(l => l);
 
             lines.forEach(line => {
-                // Ultra-loose match: find any 4 numbers separated by spaces/dashes, optional W4-6
-                const lsdMatch = line.match(/(\d{1,2})\s*[-–—]?\s*(\d{1,2})\s*[-–—]?\s*(\d{2,3})\s*[-–—]?\s*(\d{1,2})\s*[-–—]?\s*(W\s*[4-6]\s*M?)?/i);
+                // Loose match for LSD: 4 numbers with dashes/spaces, optional W4-6
+                const lsdMatch = line.match(/(\d{1,2})\s*[-–—]\s*(\d{1,2})\s*[-–—]\s*(\d{2,3})\s*[-–—]\s*(\d{1,2})\s*[-–—]\s*(W\s*[4-6]\s*M?)?/i);
                 if (!lsdMatch) return;
 
                 let lsd = `${lsdMatch[1].padStart(2,'0')}-${lsdMatch[2].padStart(2,'0')}-${lsdMatch[3].padStart(3,'0')}-${lsdMatch[4].padStart(2,'0')}`;
                 if (lsdMatch[5]) lsd += `-${lsdMatch[5].replace(/\s/g,'').toUpperCase()}`;
 
-                const sizeMatch = line.match(/(\d{1,2}\/\d{1,2}"?|\d"|\d\/\d|\d\.\d{3})/i);
-                const size = sizeMatch ? sizeMatch[0].replace(/\s/g, '').toUpperCase() : '';
+                // Loose match for size: numbers with . or / or " or X
+                const sizeMatch = line.match(/(\d{1,2}\.\d{3}\s*X?|\d{1,2}\/\d{1,2}"?|\d"|\d\/\d|\d{1,2}"/i);
+                const size = sizeMatch ? sizeMatch[0].toUpperCase() : '';
 
+                // Type: loose keyword match
                 let type = '';
                 const lower = line.toLowerCase();
                 if (/dry ?flow/.test(lower)) type = 'DRY FLOW';
                 else if (/npt ?turbine|turbine/.test(lower)) type = 'NPT TURBINE';
-                else if (/rosemount|emerson|efm|micro motion|fisher/.test(lower)) type = 'EFM/OTHER';
+                else if (/ez ?in/.test(lower)) type = 'EZ IN';
+                else if (/rosemount|emerson|efm|micro motion|fisher|roots/.test(lower)) type = 'EFM/OTHER';
 
                 allTasks.push({lsd, size, type, rawLine: line});
                 if (size) sizeSet.add(size);
                 if (type) typeSet.add(type);
             });
 
-            if (allTasks.length === 0) {
-                status.textContent = 'No LSDs found in pasted text. Make sure the pasted text includes the LSD lines (like 04-38-49-09 or CC 11-22 04-38-49-09). Try copying more text or a different scan.';
-                return;
-            }
+            if (allTasks.length === 0) return status.textContent = 'No LSDs found. Make sure the pasted text includes the LSD lines (like 04-38-49-09). Try copying more text from Lens or a different scan.';
 
             sizeFilter.innerHTML = '';
             [...sizeSet].sort().forEach(s => {
@@ -124,6 +137,7 @@
             });
 
             filterSection.style.display = 'block';
+            tasksBtn.style.display = 'block';
             status.textContent = `Found ${allTasks.length} tasks. Select filters and plot.`;
         }
 
@@ -139,7 +153,7 @@
                 return sizeOk && typeOk;
             });
 
-            if (filtered.length === 0) return status.textContent = 'No matching tasks. Try selecting fewer filters or none.';
+            if (filtered.length === 0) return status.textContent = 'No matching tasks.';
 
             const start = currentLat ? {lat: currentLat, lon: currentLon} : {lat: 51.0447, lon: -114.0719};
 
