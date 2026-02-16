@@ -3,37 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LSD Trip Planner - Lens Paste</title>
+    <title>LSD Trip Planner</title>
     <style>
-        body { font-family: Arial; padding: 20px; background: #f0f0f0; text-align: center; }
-        .container { max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
-        h2 { color: #333; }
-        .tip { color: #d32f2f; font-weight: bold; margin: 15px 0; font-size: 18px; }
-        label { display: block; margin: 20px 0 10px; font-weight: bold; font-size: 18px; }
-        textarea { width: 100%; height: 250px; padding: 15px; font-size: 16px; border: 1px solid #ccc; border-radius: 10px; resize: vertical; }
-        button { width: 100%; padding: 18px; font-size: 20px; background: #007bff; color: white; border: none; border-radius: 10px; cursor: pointer; margin: 15px 0; }
+        body { font-family: Arial; padding: 20px; background: #f0f0f0; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; }
+        h2 { text-align: center; }
+        .tip { color: #d32f2f; font-weight: bold; margin: 10px 0; }
+        label { display: block; margin: 15px 0 5px; font-weight: bold; }
+        input, select, button { width: 100%; padding: 12px; margin-bottom: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; }
         button:hover { background: #0056b3; }
-        #status { margin-top: 20px; font-weight: bold; color: #333; font-size: 17px; white-space: pre-wrap; }
-        #filterSection { display: none; margin-top: 30px; }
-        select[multiple] { height: 140px; width: 100%; font-size: 16px; }
+        #status { margin-top: 20px; font-weight: bold; color: #333; white-space: pre-wrap; }
+        #filterSection { display: none; margin-top: 20px; }
+        select[multiple] { height: 120px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>LSD Trip Planner - Lens Paste</h2>
+        <h2>LSD Trip Planner</h2>
 
-        <p class="tip">Scan list with Adobe Scan → open in Google Photos → tap Lens → copy text → paste below → tap Extract.</p>
+        <p class="tip">Tip: Use Adobe Scan for multi-page lists. Upload here to extract LSDs and plot route.</p>
 
-        <label>Paste OCR Text Here</label>
-        <textarea id="ocrText" placeholder="Paste the copied text from Google Lens here..."></textarea>
+        <label>Starting Point</label>
+        <input type="text" id="startLocation" placeholder="Using current location..." disabled>
 
-        <button onclick="extractFromText()">Extract from Text</button>
+        <div id="locationStatus"></div>
+
+        <label>Upload Photo or PDF</label>
+        <input type="file" id="imageInput" accept="image/*,application/pdf">
+
+        <button onclick="extractAndShowFilters()">Extract & Plot</button>
 
         <div id="filterSection">
-            <label for="sizeFilter">Sizes (select multiple):</label>
+            <label for="sizeFilter">Sizes:</label>
             <select id="sizeFilter" multiple></select>
 
-            <label for="typeFilter">Types (select multiple):</label>
+            <label for="typeFilter">Types:</label>
             <select id="typeFilter" multiple></select>
 
             <button onclick="applyFiltersAndPlot()">Plot Route</button>
@@ -50,6 +55,7 @@
         let allTasks = [];
 
         const startInput = document.getElementById('startLocation');
+        const locationStatus = document.getElementById('locationStatus');
         const status = document.getElementById('status');
         const filterSection = document.getElementById('filterSection');
         const sizeFilter = document.getElementById('sizeFilter');
@@ -59,69 +65,91 @@
             navigator.geolocation.getCurrentPosition(pos => {
                 currentLat = pos.coords.latitude;
                 currentLon = pos.coords.longitude;
-                status.textContent = 'Location ready';
+                locationStatus.textContent = 'Location ready.';
+                startInput.value = 'Current location';
             }, () => {
-                status.textContent = 'Location denied – enter address manually';
+                locationStatus.textContent = 'Location denied.';
+                startInput.disabled = false;
             });
         }
 
-        function extractFromText() {
-            status.textContent = 'Extracting...';
-            const text = document.getElementById('ocrText').value.trim();
+        async function extractAndShowFilters() {
+            status.textContent = 'Processing...';
+            const file = document.getElementById('imageInput').files[0];
 
-            if (!text) return status.textContent = 'Paste text first.';
+            if (!file) return status.textContent = 'Select a file first.';
 
             allTasks = [];
             const sizeSet = new Set();
             const typeSet = new Set();
 
-            const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('language', 'eng');
+                formData.append('isOverlayRequired', 'true');
+                formData.append('isTable', 'true');
 
-            lines.forEach(line => {
-                // Very loose match: numbers with dashes or spaces, W4-6 optional
-                const lsdMatch = line.match(/(\d{1,2})\s*[-–—]\s*(\d{1,2})\s*[-–—]\s*(\d{2,3})\s*[-–—]\s*(\d{1,2})\s*[-–—]\s*(W\s*[4-6]\s*M?)?/i);
-                if (!lsdMatch) return;
+                const res = await fetch('https://apipro3.ocr.space/parse/image', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
 
-                let lsd = `${lsdMatch[1].padStart(2,'0')}-${lsdMatch[2].padStart(2,'0')}-${lsdMatch[3].padStart(3,'0')}-${lsdMatch[4].padStart(2,'0')}`;
-                if (lsdMatch[5]) lsd += `-${lsdMatch[5].replace(/\s/g,'').toUpperCase()}`;
+                let text = '';
+                if (data.ParsedResults) {
+                    data.ParsedResults.forEach(result => {
+                        text += result.ParsedText + '\n';
+                    });
+                }
 
-                const sizeMatch = line.match(/(\d{1,2}\/\d{1,2}"?|\d"|\d\/\d)/i);
-                const size = sizeMatch ? sizeMatch[0].replace(/\s/g, '').toUpperCase() : '';
+                if (!text) return status.textContent = 'No text extracted. Try a different photo.';
 
-                let type = '';
-                const lower = line.toLowerCase();
-                if (/dry ?flow/.test(lower)) type = 'DRY FLOW';
-                else if (/npt ?turbine|turbine/.test(lower)) type = 'NPT TURBINE';
-                else if (/rosemount|emerson|efm/.test(lower)) type = 'EFM';
+                const lines = text.split('\n').map(l => l.trim()).filter(l => l);
 
-                allTasks.push({lsd, size, type, rawLine: line});
-                if (size) sizeSet.add(size);
-                if (type) typeSet.add(type);
-            });
+                lines.forEach(line => {
+                    const lsdMatch = line.match(/(\d{1,2})-(\d{1,2})-(\d{2,3})-(\d{1,2})-(W[4-6]M?)/i);
+                    if (!lsdMatch) return;
 
-            if (allTasks.length === 0) {
-                status.textContent = 'No LSDs found in pasted text. Make sure the pasted text includes the LSD lines (like 08-15-06-35-48-10). Try copying more text from Lens or a different scan. Raw pasted text in console (F12).';
-                return;
+                    let lsd = `${lsdMatch[1].padStart(2, '0')}-${lsdMatch[2].padStart(2, '0')}-${lsdMatch[3].padStart(3, '0')}-${lsdMatch[4].padStart(2, '0')}-${lsdMatch[5].toUpperCase()}`;
+
+                    const sizeMatch = line.match(/(\d{1,2}\/\d{1,2}"?|\d"|\d\/\d)/i);
+                    const size = sizeMatch ? sizeMatch[0] : '';
+
+                    let type = '';
+                    const lower = line.toLowerCase();
+                    if (/dry ?flow/.test(lower)) type = 'DRY FLOW';
+                    else if (/npt ?turbine|turbine/.test(lower)) type = 'NPT TURBINE';
+                    else if (/rosemount|emerson|efm|micro motion|fisher/.test(lower)) type = 'EFM/OTHER';
+
+                    allTasks.push({lsd, size, type, rawLine: line});
+                    if (size) sizeSet.add(size);
+                    if (type) typeSet.add(type);
+                });
+
+                if (allTasks.length === 0) return status.textContent = 'No LSDs found. Try a clearer scan.';
+
+                sizeFilter.innerHTML = '';
+                [...sizeSet].sort().forEach(s => {
+                    const opt = document.createElement('option');
+                    opt.value = s;
+                    opt.textContent = s;
+                    sizeFilter.appendChild(opt);
+                });
+
+                typeFilter.innerHTML = '';
+                [...typeSet].sort().forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t;
+                    opt.textContent = t;
+                    typeFilter.appendChild(opt);
+                });
+
+                filterSection.style.display = 'block';
+                status.textContent = `Found ${allTasks.length} tasks. Select filters and plot.`;
+            } catch (e) {
+                status.textContent = 'Error: ' + e.message;
             }
-
-            sizeFilter.innerHTML = '';
-            [...sizeSet].sort().forEach(s => {
-                const opt = document.createElement('option');
-                opt.value = s;
-                opt.textContent = s;
-                sizeFilter.appendChild(opt);
-            });
-
-            typeFilter.innerHTML = '';
-            [...typeSet].sort().forEach(t => {
-                const opt = document.createElement('option');
-                opt.value = t;
-                opt.textContent = t;
-                typeFilter.appendChild(opt);
-            });
-
-            filterSection.style.display = 'block';
-            status.textContent = `Found ${allTasks.length} tasks. Select filters and plot.`;
         }
 
         async function applyFiltersAndPlot() {
@@ -136,7 +164,7 @@
                 return sizeOk && typeOk;
             });
 
-            if (filtered.length === 0) return status.textContent = 'No matching tasks. Try selecting fewer filters or none.';
+            if (filtered.length === 0) return status.textContent = 'No matching tasks.';
 
             const start = currentLat ? {lat: currentLat, lon: currentLon} : {lat: 51.0447, lon: -114.0719};
 
@@ -149,7 +177,7 @@
                 if (coord) points.push(coord);
             }
 
-            if (points.length === 0) return status.textContent = 'No coordinates found. Check pasted text has valid LSDs.';
+            if (points.length === 0) return status.textContent = 'No coordinates.';
 
             let url = `https://www.google.com/maps/dir/?api=1&origin=${start.lat},${start.lon}&destination=${start.lat},${start.lon}&travelmode=driving&dir_action=navigate`;
             if (points.length <= 8) {
