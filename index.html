@@ -3,43 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LSD Trip Planner - PDF & JPG</title>
+    <title>LSD Trip Planner - Version 354</title>
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; background: #f0f0f0; }
-        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
-        h2 { text-align: center; }
-        .tip { color: #d32f2f; font-weight: bold; margin: 15px 0; }
-        label { display: block; margin: 15px 0 5px; font-weight: bold; }
-        input, select, button { width: 100%; padding: 12px; margin-bottom: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
-        button { background: #007bff; color: white; border: none; cursor: pointer; }
+        body { font-family: Arial; padding: 20px; background: #f0f0f0; text-align: center; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
+        h2 { color: #333; }
+        .tip { color: #d32f2f; font-weight: bold; margin: 15px 0; font-size: 18px; }
+        label { display: block; margin: 20px 0 10px; font-weight: bold; font-size: 18px; }
+        textarea { width: 100%; height: 250px; padding: 15px; font-size: 16px; border: 1px solid #ccc; border-radius: 10px; resize: vertical; }
+        button { width: 100%; padding: 18px; font-size: 20px; background: #007bff; color: white; border: none; border-radius: 10px; cursor: pointer; margin: 15px 0; }
         button:hover { background: #0056b3; }
-        #debugBtn { background: #6c757d; }
-        #debugBtn:hover { background: #5a6268; }
-        #status { margin-top: 20px; font-weight: bold; color: #333; white-space: pre-wrap; }
-        #debugBox { display: none; margin-top: 20px; padding: 12px; background: #f8f8f8; border: 1px solid #ddd; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 14px; white-space: pre-wrap; }
-        #filterSection { display: none; margin-top: 20px; }
-        select[multiple] { height: 120px; }
+        #status { margin-top: 20px; font-weight: bold; color: #333; font-size: 17px; white-space: pre-wrap; }
+        #filterSection { display: none; margin-top: 30px; }
+        select[multiple] { height: 140px; width: 100%; font-size: 16px; }
+        #version { text-align: center; color: #6c757d; font-weight: bold; margin: 10px 0; font-size: 16px; }
     </style>
-    <script src="https://unpkg.com/pdfjs-dist@2.10.377/build/pdf.min.js"></script>
-    <script src="https://unpkg.com/pdfjs-dist@2.10.377/build/pdf.worker.min.js"></script>
 </head>
 <body>
     <div class="container">
-        <h2>LSD Trip Planner - PDF & JPG</h2>
+        <p id="version">Version 354</p>
 
-        <p class="tip">Upload photo or PDF (Adobe Scan PDFs work great). If error, tap "Show Debug Info" and paste the text here.</p>
+        <h2>LSD Trip Planner - Lens Paste</h2>
 
-        <label>Starting Point</label>
-        <input type="text" id="startLocation" placeholder="Using current location...">
-        <div id="locationStatus">Detecting location...</div>
+        <p class="tip">Scan list with Adobe Scan → open in Google Photos → tap Lens → copy text → paste below → tap Extract.</p>
 
-        <label>Upload Photos or PDFs (multiple OK)</label>
-        <input type="file" id="imageInput" multiple>
+        <label>Paste OCR Text Here</label>
+        <textarea id="ocrText" placeholder="Paste the copied text from Google Lens here..."></textarea>
 
-        <button onclick="extractAndShowFilters()">Extract & Plot</button>
-        <button id="debugBtn" onclick="showDebug()">Show Debug Info</button>
-
-        <div id="debugBox"></div>
+        <button onclick="extractFromText()">Extract from Text</button>
 
         <div id="filterSection">
             <label for="sizeFilter">Sizes (select multiple):</label>
@@ -60,113 +51,58 @@
         let currentLat = null;
         let currentLon = null;
         let allTasks = [];
-        let debugLog = [];
 
         const startInput = document.getElementById('startLocation');
-        const locationStatus = document.getElementById('locationStatus');
         const status = document.getElementById('status');
         const filterSection = document.getElementById('filterSection');
         const sizeFilter = document.getElementById('sizeFilter');
         const typeFilter = document.getElementById('typeFilter');
-        const debugBox = document.getElementById('debugBox');
-
-        function logDebug(msg) {
-            debugLog.push(msg);
-            console.log(msg);
-        }
 
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(pos => {
                 currentLat = pos.coords.latitude;
                 currentLon = pos.coords.longitude;
-                locationStatus.textContent = 'Location OK';
-                startInput.value = 'Current location';
-                startInput.disabled = true;
-            }, err => {
-                locationStatus.textContent = 'Location denied: ' + err.message;
-                startInput.disabled = false;
+                status.textContent = 'Location ready';
+            }, () => {
+                status.textContent = 'Location denied – enter address manually';
             });
         }
 
-        function showDebug() {
-            debugBox.innerText = debugLog.join('\n\n') || 'No debug info yet.';
-            debugBox.style.display = debugBox.style.display === 'block' ? 'none' : 'block';
-        }
+        function extractFromText() {
+            status.textContent = 'Extracting...';
+            const text = document.getElementById('ocrText').value.trim();
 
-        async function extractAndShowFilters() {
-            status.textContent = 'Processing...';
-            debugLog = [];
-            const files = document.getElementById('imageInput').files;
-
-            if (files.length === 0) return status.textContent = 'Select file(s) first.';
+            if (!text) return status.textContent = 'Paste text first.';
 
             allTasks = [];
+            const sizeSet = new Set();
+            const typeSet = new Set();
 
-            for (const file of files) {
-                logDebug(`Processing: ${file.name} (${file.type}, ${file.size} bytes)`);
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l);
 
-                try {
-                    let text = '';
+            lines.forEach(line => {
+                // Loose match: 4 numbers with dashes/spaces, optional W4-6
+                const lsdMatch = line.match(/(\d{1,2})\s*[-–—]\s*(\d{1,2})\s*[-–—]\s*(\d{2,3})\s*[-–—]\s*(\d{1,2})\s*[-–—]\s*(W\s*[4-6]\s*M?)?/i);
+                if (!lsdMatch) return;
 
-                    if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
-                        logDebug('Processing PDF...');
-                        if (typeof pdfjsLib === 'undefined') {
-                            logDebug('pdfjsLib failed to load. Skipping PDF.');
-                            continue;
-                        }
-                        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@2.10.377/build/pdf.worker.min.js';
-                        const arrayBuffer = await file.arrayBuffer();
-                        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-                        for (let i = 1; i <= pdf.numPages; i++) {
-                            const page = await pdf.getPage(i);
-                            const content = await page.getTextContent();
-                            text += content.items.map(item => item.str).join(' ') + '\n';
-                        }
-                    } else {
-                        logDebug('Processing image...');
-                        const { createWorker } = Tesseract;
-                        const worker = await createWorker('eng');
-                        const { data: { text: ocrText } } = await worker.recognize(file);
-                        await worker.terminate();
-                        text = ocrText;
-                    }
+                let lsd = `${lsdMatch[1].padStart(2,'0')}-${lsdMatch[2].padStart(2,'0')}-${lsdMatch[3].padStart(3,'0')}-${lsdMatch[4].padStart(2,'0')}`;
+                if (lsdMatch[5]) lsd += `-${lsdMatch[5].replace(/\s/g,'').toUpperCase()}`;
 
-                    logDebug(`Raw text from ${file.name}: ${text.substring(0, 500)}...`);
+                const sizeMatch = line.match(/(\d{1,2}\/\d{1,2}"?|\d"|\d\/\d)/i);
+                const size = sizeMatch ? sizeMatch[0].replace(/\s/g, '').toUpperCase() : '';
 
-                    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 5);
+                let type = '';
+                const lower = line.toLowerCase();
+                if (/dry ?flow/.test(lower)) type = 'DRY FLOW';
+                else if (/npt ?turbine|turbine/.test(lower)) type = 'NPT TURBINE';
+                else if (/rosemount|emerson|efm/.test(lower)) type = 'EFM';
 
-                    lines.forEach(line => {
-                        const lsdMatch = line.match(/(\d{1,2})\s*[-–—]\s*(\d{1,2})\s*[-–—]\s*(\d{2,3})\s*[-–—]\s*(\d{1,2})\s*[-–—]\s*(W\s*[4-6]\s*M?)?/i);
-                        if (!lsdMatch) return;
+                allTasks.push({lsd, size, type, rawLine: line});
+                if (size) sizeSet.add(size);
+                if (type) typeSet.add(type);
+            });
 
-                        let lsd = `${lsdMatch[1].padStart(2,'0')}-${lsdMatch[2].padStart(2,'0')}-${lsdMatch[3].padStart(3,'0')}-${lsdMatch[4].padStart(2,'0')}`;
-                        if (lsdMatch[5]) lsd += `-${lsdMatch[5].replace(/\s/g,'').toUpperCase()}`;
-
-                        const sizeMatch = line.match(/(\d{1,2}\/\d{1,2}"?|\d"|\d\/\d)/i);
-                        const size = sizeMatch ? sizeMatch[0].replace(/\s/g, '').toUpperCase() : '';
-
-                        let type = '';
-                        const lower = line.toLowerCase();
-                        if (/dry ?flow/.test(lower)) type = 'DRY FLOW';
-                        else if (/npt ?turbine|turbine/.test(lower)) type = 'NPT TURBINE';
-                        else if (/rosemount|emerson|efm|micro motion|fisher/.test(lower)) type = 'EFM/OTHER';
-
-                        allTasks.push({lsd, size, type, rawLine: line});
-                    });
-                } catch (e) {
-                    logDebug(`Error processing ${file.name}: ${e.message}`);
-                    status.textContent = 'Error: ' + e.message + '. Tap "Show Debug Info" for details.';
-                }
-            }
-
-            if (allTasks.length === 0) {
-                status.textContent = 'No LSDs found. Tap "Show Debug Info" and paste the text here.';
-                return;
-            }
-
-            // Populate filters
-            const sizeSet = new Set(allTasks.map(t => t.size).filter(s => s));
-            const typeSet = new Set(allTasks.map(t => t.type).filter(t => t));
+            if (allTasks.length === 0) return status.textContent = 'No LSDs found in pasted text. Make sure the pasted text includes the LSD lines (like 04-38-49-09). Try copying more text from Lens or a different scan.';
 
             sizeFilter.innerHTML = '';
             [...sizeSet].sort().forEach(s => {
@@ -213,7 +149,7 @@
                 if (coord) points.push(coord);
             }
 
-            if (points.length === 0) return status.textContent = 'No coordinates.';
+            if (points.length === 0) return status.textContent = 'No coordinates found. Check pasted text has valid LSDs.';
 
             let url = `https://www.google.com/maps/dir/?api=1&origin=${start.lat},${start.lon}&destination=${start.lat},${start.lon}&travelmode=driving&dir_action=navigate`;
             if (points.length <= 8) {
@@ -233,10 +169,7 @@
                 const res = await fetch(`https://developer.townshipcanada.com/search/legal-location?location=${encodeURIComponent(lsd)}`, {
                     headers: { 'x-api-key': apiKey }
                 });
-                if (!res.ok) {
-                    logDebug(`API error for ${lsd}: ${res.status} ${res.statusText}`);
-                    return null;
-                }
+                if (!res.ok) return null;
                 const data = await res.json();
                 for (const f of data.features || []) {
                     if (f.geometry?.type === 'Point') {
@@ -244,9 +177,7 @@
                         return {lat, lon};
                     }
                 }
-            } catch (e) {
-                logDebug(`Fetch error for ${lsd}: ${e.message}`);
-            }
+            } catch {}
             return null;
         }
     </script>
