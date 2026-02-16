@@ -94,7 +94,7 @@
             const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 5);
 
             lines.forEach(line => {
-                // Ultra-loose LSD match: any 4 numbers with spaces/dashes, optional W4-6
+                // Ultra-loose LSD match: any 4 numbers with any separator, optional W4-6
                 const lsdMatch = line.match(/(\d{1,2})\s*[-–—.,]*\s*(\d{1,2})\s*[-–—.,]*\s*(\d{2,3})\s*[-–—.,]*\s*(\d{1,2})\s*[-–—.,]*\s*(W\s*[4-6]\s*M?)?/i);
                 if (!lsdMatch) return;
 
