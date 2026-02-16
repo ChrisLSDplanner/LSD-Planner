@@ -78,11 +78,12 @@
             const lines = text.split('\n').map(l => l.trim()).filter(l => l);
 
             lines.forEach(line => {
-                // Looser match: allow spaces, extra chars, missing leading zeros
-                const lsdMatch = line.match(/(\d{1,2})\s*[-–—]\s*(\d{1,2})\s*[-–—]\s*(\d{2,3})\s*[-–—]\s*(\d{1,2})\s*[-–—]\s*(W[4-6]\s*M?)/i);
+                // Very loose match: numbers with dashes or spaces, W4-6 optional
+                const lsdMatch = line.match(/(\d{1,2})\s*[-–—]\s*(\d{1,2})\s*[-–—]\s*(\d{2,3})\s*[-–—]\s*(\d{1,2})\s*[-–—]\s*(W\s*[4-6]\s*M?)?/i);
                 if (!lsdMatch) return;
 
-                let lsd = `${lsdMatch[1].padStart(2,'0')}-${lsdMatch[2].padStart(2,'0')}-${lsdMatch[3].padStart(3,'0')}-${lsdMatch[4].padStart(2,'0')}-${lsdMatch[5].replace(/\s/g,'').toUpperCase()}`;
+                let lsd = `${lsdMatch[1].padStart(2,'0')}-${lsdMatch[2].padStart(2,'0')}-${lsdMatch[3].padStart(3,'0')}-${lsdMatch[4].padStart(2,'0')}`;
+                if (lsdMatch[5]) lsd += `-${lsdMatch[5].replace(/\s/g,'').toUpperCase()}`;
 
                 const sizeMatch = line.match(/(\d{1,2}\/\d{1,2}"?|\d"|\d\/\d)/i);
                 const size = sizeMatch ? sizeMatch[0].replace(/\s/g, '').toUpperCase() : '';
@@ -98,7 +99,10 @@
                 if (type) typeSet.add(type);
             });
 
-            if (allTasks.length === 0) return status.textContent = 'No LSDs found in pasted text. Make sure to copy the full text from Lens (including LSD lines). Try pasting more text or a different scan.';
+            if (allTasks.length === 0) {
+                status.textContent = 'No LSDs found in pasted text. Make sure the pasted text includes the LSD lines (like 08-15-06-35-48-10). Try copying more text from Lens or a different scan. Raw pasted text in console (F12).';
+                return;
+            }
 
             sizeFilter.innerHTML = '';
             [...sizeSet].sort().forEach(s => {
