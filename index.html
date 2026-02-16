@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LSD Trip Planner - With XLS Export</title>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <title>LSD Trip Planner - Updated OCR</title>
     <style>
         body { font-family: Arial; padding: 20px; background: #f0f0f0; }
         .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; }
         h2 { text-align: center; }
+        .tip { color: #d32f2f; font-weight: bold; margin: 10px 0; }
         label { display: block; margin: 15px 0 5px; font-weight: bold; }
         input, select, button { width: 100%; padding: 12px; margin-bottom: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
         button { background: #007bff; color: white; border: none; cursor: pointer; }
@@ -18,21 +17,21 @@
         #filterSection { display: none; margin-top: 20px; }
         select[multiple] { height: 120px; }
         #rawOcr { display: none; margin-top: 20px; padding: 10px; background: #f8f8f8; border: 1px solid #ddd; max-height: 300px; overflow-y: auto; font-family: monospace; }
-        .tip { color: #d32f2f; font-weight: bold; margin: 10px 0; }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body>
     <div class="container">
-        <h2>LSD Trip Planner - With XLS Export</h2>
+        <h2>LSD Trip Planner - Updated OCR</h2>
 
-        <p class="tip">Tip: Scan photos with Adobe Scan or Microsoft Lens for best results.</p>
+        <p class="tip">Tip: For best OCR, scan with Adobe Scan or Microsoft Lens (fixes noise/light/grid) — then choose the scan from gallery/files here.</p>
 
         <label>Starting Point</label>
         <input type="text" id="startLocation" placeholder="Using current location...">
         <div id="locationStatus">Detecting location...</div>
 
-        <label>Photos (select multiple!)</label>
-        <input type="file" id="imageInput" accept="image/*" capture="environment" multiple>
+        <label>Photos (select multiple from camera/gallery/files!)</label>
+        <input type="file" id="imageInput" accept="image/*" multiple>
 
         <button onclick="extractAndShowFilters()">Extract from Photos</button>
         <button onclick="toggleRawOcr()">Show Raw OCR (debug)</button>
@@ -47,7 +46,6 @@
             <select id="typeFilter" multiple></select>
 
             <button onclick="applyFiltersAndPlot()">Plot Route</button>
-            <button id="exportBtn" style="display:none; background: #28a745;" onclick="exportToXLS()">Export to XLS</button>
         </div>
 
         <div id="status"></div>
@@ -68,7 +66,6 @@
         const sizeFilter = document.getElementById('sizeFilter');
         const typeFilter = document.getElementById('typeFilter');
         const rawOcrDiv = document.getElementById('rawOcr');
-        const exportBtn = document.getElementById('exportBtn');
 
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(pos => {
@@ -139,7 +136,7 @@
             rawOcrDiv.innerText = rawTexts.join('\n\n');
 
             if (allTasks.length === 0) {
-                status.textContent = 'No patterns found. Try scanning with Adobe Scan or Microsoft Lens for better results. Raw text above.';
+                status.textContent = 'No patterns found. Try scanning with Adobe Scan or Microsoft Lens for better results. Raw text in box above.';
                 return;
             }
 
@@ -160,23 +157,7 @@
             });
 
             filterSection.style.display = 'block';
-            exportBtn.style.display = 'block';
-            status.textContent = `Found ${allTasks.length} tasks from ${files.length} photo(s).\nSelect filters and plot, or export to XLS.`;
-        }
-
-        function exportToXLS() {
-            const data = allTasks.map(task => ({
-                LSD: task.lsd,
-                Size: task.size,
-                Type: task.type,
-                Raw: task.rawLine
-            }));
-
-            const ws = XLSX.utils.json_to_sheet(data);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "LSD Tasks");
-            XLSX.writeFile(wb, "lsd_tasks.xlsx");
-            status.textContent += '\nXLS downloaded! Open in Excel/Google Sheets.';
+            status.textContent = `Found ${allTasks.length} tasks from ${files.length} photo(s). Select filters and plot.`;
         }
 
         async function applyFiltersAndPlot() {
@@ -216,7 +197,7 @@
             }
 
             window.open(url, '_blank');
-            status.textContent = `Opening Maps with ${points.length} locations. XLS export available above.`;
+            status.textContent = `Opening Maps with ${points.length} locations.`;
         }
 
         async function getLatLongFromLSD(lsd) {
