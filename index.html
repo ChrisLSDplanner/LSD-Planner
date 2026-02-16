@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LSD Trip Planner - PDF & JPG</title>
+    <title>LSD Trip Planner - PDF Fix</title>
     <style>
         body { font-family: Arial, sans-serif; padding: 20px; background: #f0f0f0; }
         .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
@@ -15,7 +15,7 @@
         button:hover { background: #0056b3; }
         #status { margin-top: 20px; font-weight: bold; color: #333; white-space: pre-wrap; font-size: 17px; }
         #filterSection { display: none; margin-top: 30px; }
-        select[multiple] { height: 140px; }
+        select[multiple] { height: 140px; width: 100%; font-size: 16px; }
         #rawOcr { display: none; margin-top: 20px; padding: 12px; background: #f8f8f8; border: 1px solid #ddd; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 14px; }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
@@ -23,16 +23,16 @@
 </head>
 <body>
     <div class="container">
-        <h2>LSD Trip Planner</h2>
+        <h2>LSD Trip Planner - PDF Fix</h2>
 
-        <p class="tip">Tip: Scan lists with Adobe Scan (PDF or JPG) for best results. On phone, tap upload → choose "Files" or "Browse" to pick PDFs.</p>
+        <p class="tip">Tip: Scan with Adobe Scan → save PDF → tap upload → choose "Files" or "Browse" to pick PDF from Files app.</p>
 
         <label>Starting Point</label>
         <input type="text" id="startLocation" placeholder="Using current location...">
         <div id="locationStatus">Detecting location...</div>
 
         <label>Upload Photos or PDFs (multiple OK)</label>
-        <input type="file" id="imageInput" accept="image/*,.pdf,application/pdf" multiple>
+        <input type="file" id="imageInput" multiple>
 
         <button onclick="extractAndShowFilters()">Extract & Plot Route</button>
         <button onclick="toggleRawOcr()">Show Raw OCR (debug)</button>
@@ -100,7 +100,7 @@
                 try {
                     let text = '';
 
-                    if (file.type === 'application/pdf') {
+                    if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
                         const arrayBuffer = await file.arrayBuffer();
                         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
                         for (let i = 1; i <= pdf.numPages; i++) {
