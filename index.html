@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LSD Trip Planner - Version 355</title>
+    <title>LSD Trip Planner - Version 356</title>
     <style>
         body { font-family: Arial; padding: 20px; background: #f0f0f0; text-align: center; }
         .container { max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
@@ -14,17 +14,17 @@
         button { width: 100%; padding: 18px; font-size: 20px; background: #007bff; color: white; border: none; border-radius: 10px; cursor: pointer; margin: 15px 0; }
         button:hover { background: #0056b3; }
         #status { margin-top: 20px; font-weight: bold; color: #333; font-size: 17px; white-space: pre-wrap; }
-        #filterSection { display: none; margin: 30px 0; }
+        #filterSection { display: none; margin-top: 30px; }
         select[multiple] { height: 140px; width: 100%; font-size: 16px; }
         #version { text-align: center; color: #6c757d; font-weight: bold; margin: 10px 0; font-size: 16px; }
-        #tasksBox { display: none; margin-top: 20px; padding: 12px; background: #f8f8f8; border: 1px solid #ddd; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 14px; white-space: pre-wrap; }
         #tasksBtn { background: #6c757d; }
         #tasksBtn:hover { background: #5a6268; }
+        #tasksBox { display: none; margin-top: 20px; padding: 12px; background: #f8f8f8; border: 1px solid #ddd; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 14px; white-space: pre-wrap; }
     </style>
 </head>
 <body>
     <div class="container">
-        <p id="version">Version 355</p>
+        <p id="version">Version 356</p>
 
         <h2>LSD Trip Planner - Lens Paste</h2>
 
@@ -35,7 +35,7 @@
 
         <button onclick="extractFromText()">Extract from Text</button>
 
-        <button id="tasksBtn" onclick="showTasks()">Show Extracted Tasks</button>
+        <button id="tasksBtn" onclick="showTasks()">Show Extracted Tasks (debug)</button>
 
         <div id="tasksBox"></div>
 
@@ -77,7 +77,7 @@
         }
 
         function showTasks() {
-            tasksBox.innerText = allTasks.map(task => `LSD: ${task.lsd}\nSize: ${task.size}\nType: ${task.type}\nRaw: ${task.rawLine}\n---`).join('\n') || 'No tasks extracted yet.';
+            tasksBox.innerText = allTasks.map(task => `LSD: ${task.lsd}\nSize: ${task.size || 'none'}\nType: ${task.type || 'none'}\nRaw: ${task.rawLine}\n---`).join('\n') || 'No tasks extracted yet.';
             tasksBox.style.display = tasksBox.style.display === 'block' ? 'none' : 'block';
         }
 
@@ -91,17 +91,17 @@
             const sizeSet = new Set();
             const typeSet = new Set();
 
-            const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 5);
 
             lines.forEach(line => {
-                // Loose match for LSD: 4 numbers with dashes/spaces, optional W4-6
-                const lsdMatch = line.match(/(\d{1,2})\s*[-–—]\s*(\d{1,2})\s*[-–—]\s*(\d{2,3})\s*[-–—]\s*(\d{1,2})\s*[-–—]\s*(W\s*[4-6]\s*M?)?/i);
+                // Ultra-loose LSD match: any 4 numbers with spaces/dashes, optional W4-6
+                const lsdMatch = line.match(/(\d{1,2})\s*[-–—.,]*\s*(\d{1,2})\s*[-–—.,]*\s*(\d{2,3})\s*[-–—.,]*\s*(\d{1,2})\s*[-–—.,]*\s*(W\s*[4-6]\s*M?)?/i);
                 if (!lsdMatch) return;
 
                 let lsd = `${lsdMatch[1].padStart(2,'0')}-${lsdMatch[2].padStart(2,'0')}-${lsdMatch[3].padStart(3,'0')}-${lsdMatch[4].padStart(2,'0')}`;
                 if (lsdMatch[5]) lsd += `-${lsdMatch[5].replace(/\s/g,'').toUpperCase()}`;
 
-                // Loose match for size: numbers with . or / or " or X
+                // Loose size: any number with . or / or " or X
                 const sizeMatch = line.match(/(\d{1,2}\.\d{3}\s*X?|\d{1,2}\/\d{1,2}"?|\d"|\d\/\d|\d{1,2}"/i);
                 const size = sizeMatch ? sizeMatch[0].toUpperCase() : '';
 
@@ -118,7 +118,10 @@
                 if (type) typeSet.add(type);
             });
 
-            if (allTasks.length === 0) return status.textContent = 'No LSDs found. Make sure the pasted text includes the LSD lines (like 04-38-49-09). Try copying more text from Lens or a different scan.';
+            if (allTasks.length === 0) {
+                status.textContent = 'No LSDs found in pasted text. Make sure the pasted text includes the LSD lines (like 04-38-49-09 or CC 11-22 04-38-49-09). Try copying more text from Lens or a different scan.';
+                return;
+            }
 
             sizeFilter.innerHTML = '';
             [...sizeSet].sort().forEach(s => {
@@ -137,7 +140,6 @@
             });
 
             filterSection.style.display = 'block';
-            tasksBtn.style.display = 'block';
             status.textContent = `Found ${allTasks.length} tasks. Select filters and plot.`;
         }
 
