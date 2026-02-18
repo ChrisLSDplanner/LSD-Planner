@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LSD Trip Planner - Version 357</title>
+    <title>LSD Trip Planner - Version 358</title>
     <style>
         body { font-family: Arial; padding: 20px; background: #f0f0f0; text-align: center; }
         .container { max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
@@ -24,7 +24,7 @@
 </head>
 <body>
     <div class="container">
-        <p id="version">Version 357</p>
+        <p id="version">Version 358</p>
 
         <h2>LSD Trip Planner - Lens Paste</h2>
 
@@ -82,66 +82,62 @@
         }
 
         function extractFromText() {
-            try {
-                status.textContent = 'Extracting...';
-                const text = document.getElementById('ocrText').value.trim();
+            status.textContent = 'Extracting...';
+            const text = document.getElementById('ocrText').value.trim();
 
-                if (!text) return status.textContent = 'Paste text first.';
+            if (!text) return status.textContent = 'Paste text first.';
 
-                allTasks = [];
-                const sizeSet = new Set();
-                const typeSet = new Set();
+            allTasks = [];
+            const sizeSet = new Set();
+            const typeSet = new Set();
 
-                const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 5);
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 5);
 
-                lines.forEach(line => {
-                    // Ultra-loose LSD match: any 4 numbers with any separator, optional W4-6
-                    const lsdMatch = line.match(/(\d{1,2})[\s-–—.,]*(\d{1,2})[\s-–—.,]*(\d{2,3})[\s-–—.,]*(\d{1,2})[\s-–—.,]* (W[\s4-6]M?)?/i);
-                    if (!lsdMatch) return;
+            lines.forEach(line => {
+                // Ultra-loose LSD match: any 4 numbers with any separator, optional W4-6
+                const lsdMatch = line.match(/(\d{1,2})[\s-–—.,]*(\d{1,2})[\s-–—.,]*(\d{2,3})[\s-–—.,]*(\d{1,2})[\s-–—.,]* (W[\s4-6]M?)?/i);
+                if (!lsdMatch) return;
 
-                    let lsd = `${lsdMatch[1].padStart(2,'0')}-${lsdMatch[2].padStart(2,'0')}-${lsdMatch[3].padStart(3,'0')}-${lsdMatch[4].padStart(2,'0')}`;
-                    if (lsdMatch[5]) lsd += `-${lsdMatch[5].replace(/\s/g,'').toUpperCase()}`;
+                let lsd = `${lsdMatch[1].padStart(2,'0')}-${lsdMatch[2].padStart(2,'0')}-${lsdMatch[3].padStart(3,'0')}-${lsdMatch[4].padStart(2,'0')}`;
+                if (lsdMatch[5]) lsd += `-${lsdMatch[5].replace(/\s/g,'').toUpperCase()}`;
 
-                    // Loose size: any number with . or / or " or X
-                    const sizeMatch = line.match(/(\d{1,2}\.\d{3}\s*X?|\d{1,2}\/\d{1,2}"?|\d"|\d\/\d|\d{1,2}"/i);
-                    const size = sizeMatch ? sizeMatch[0].toUpperCase() : '';
+                // Loose size: any number with . or / or " or X
+                const sizeMatch = line.match(/(\d{1,2}\.\d{3}\s*X?|\d{1,2}\/\d{1,2}"?|\d"|\d\/\d|\d{1,2}"/i);
+                const size = sizeMatch ? sizeMatch[0].toUpperCase() : '';
 
-                    // Type: loose keyword match
-                    let type = '';
-                    const lower = line.toLowerCase();
-                    if (/dry ?flow/.test(lower)) type = 'DRY FLOW';
-                    else if (/npt ?turbine|turbine/.test(lower)) type = 'NPT TURBINE';
-                    else if (/ez ?in/.test(lower)) type = 'EZ IN';
-                    else if (/rosemount|emerson|efm|micro motion|fisher|roots/.test(lower)) type = 'EFM/OTHER';
+                // Type: loose keyword match
+                let type = '';
+                const lower = line.toLowerCase();
+                if (/dry ?flow/.test(lower)) type = 'DRY FLOW';
+                else if (/npt ?turbine|turbine/.test(lower)) type = 'NPT TURBINE';
+                else if (/ez ?in/.test(lower)) type = 'EZ IN';
+                else if (/rosemount|emerson|efm|micro motion|fisher|roots/.test(lower)) type = 'EFM/OTHER';
 
-                    allTasks.push({lsd, size, type, rawLine: line});
-                    if (size) sizeSet.add(size);
-                    if (type) typeSet.add(type);
-                });
+                allTasks.push({lsd, size, type, rawLine: line});
+                if (size) sizeSet.add(size);
+                if (type) typeSet.add(type);
+            });
 
-                if (allTasks.length === 0) return status.textContent = 'No LSDs found in pasted text. Make sure the pasted text includes the LSD lines (like 04-38-49-09 or CC 11-22 04-38-49-09). Try copying more text from Lens or a different scan.';
+            if (allTasks.length === 0) return status.textContent = 'No LSDs found in pasted text. Make sure the pasted text includes the LSD lines (like 04-38-49-09 or CC 11-22 04-38-49-09). Try copying more text from Lens or a different scan.';
 
-                sizeFilter.innerHTML = '';
-                [...sizeSet].sort().forEach(s => {
-                    const opt = document.createElement('option');
-                    opt.value = s;
-                    opt.textContent = s;
-                    sizeFilter.appendChild(opt);
-                });
+            sizeFilter.innerHTML = '';
+            [...sizeSet].sort().forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s;
+                opt.textContent = s;
+                sizeFilter.appendChild(opt);
+            });
 
-                typeFilter.innerHTML = '';
-                [...typeSet].sort().forEach(t => {
-                    const opt = document.createElement('option');
-                    opt.value = t;
-                    opt.textContent = t;
-                    typeFilter.appendChild(opt);
-                });
+            typeFilter.innerHTML = '';
+            [...typeSet].sort().forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t;
+                opt.textContent = t;
+                typeFilter.appendChild(opt);
+            });
 
-                filterSection.style.display = 'block';
-                status.textContent = `Found ${allTasks.length} tasks. Select filters and plot.`;
-            } catch (e) {
-                status.textContent = 'Error: ' + e.message + '. Copy this to Grok.';
-            }
+            filterSection.style.display = 'block';
+            status.textContent = `Found ${allTasks.length} tasks. Select filters and plot.`;
         }
 
         async function applyFiltersAndPlot() {
