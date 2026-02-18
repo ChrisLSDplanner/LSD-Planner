@@ -82,6 +82,8 @@
         }
 
         function extractFromText() {
+            alert('Extracting started...');  // Confirm button press
+
             status.textContent = 'Extracting...';
             const text = document.getElementById('ocrText').value.trim();
 
@@ -94,18 +96,15 @@
             const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 5);
 
             lines.forEach(line => {
-                // Ultra-loose LSD match: any 4 numbers with any separator, optional W4-6
                 const lsdMatch = line.match(/(\d{1,2})[\s-–—.,]*(\d{1,2})[\s-–—.,]*(\d{2,3})[\s-–—.,]*(\d{1,2})[\s-–—.,]* (W[\s4-6]M?)?/i);
                 if (!lsdMatch) return;
 
                 let lsd = `${lsdMatch[1].padStart(2,'0')}-${lsdMatch[2].padStart(2,'0')}-${lsdMatch[3].padStart(3,'0')}-${lsdMatch[4].padStart(2,'0')}`;
                 if (lsdMatch[5]) lsd += `-${lsdMatch[5].replace(/\s/g,'').toUpperCase()}`;
 
-                // Loose size: any number with . or / or " or X
                 const sizeMatch = line.match(/(\d{1,2}\.\d{3}\s*X?|\d{1,2}\/\d{1,2}"?|\d"|\d\/\d|\d{1,2}"/i);
                 const size = sizeMatch ? sizeMatch[0].toUpperCase() : '';
 
-                // Type: loose keyword match
                 let type = '';
                 const lower = line.toLowerCase();
                 if (/dry ?flow/.test(lower)) type = 'DRY FLOW';
